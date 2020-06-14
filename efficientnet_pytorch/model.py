@@ -216,7 +216,7 @@ class EfficientNet(nn.Module):
             block.set_swish(memory_efficient)
 
 
-    def extract_features(self, inputs):
+    def forward(self, inputs):
         """use convolution layer to extract feature .
 
         Args:
@@ -228,41 +228,43 @@ class EfficientNet(nn.Module):
         """
         # Stem
         x = self._swish(self._bn0(self._conv_stem(inputs)))
-
+        print(x.shape)
+        print('In MBConvBlock')
         # Blocks
         for idx, block in enumerate(self._blocks):
             drop_connect_rate = self._global_params.drop_connect_rate
             if drop_connect_rate:
                 drop_connect_rate *= float(idx) / len(self._blocks) # scale drop connect_rate
             x = block(x, drop_connect_rate=drop_connect_rate)
+            print(x.shape)
         
         # Head
         x = self._swish(self._bn1(self._conv_head(x)))
 
         return x
 
-    def forward(self, inputs):
-        """EfficientNet's forward function.
-           Calls extract_features to extract features, applies final linear layer, and returns logits.
+    # def forward(self, inputs):
+    #     """EfficientNet's forward function.
+    #        Calls extract_features to extract features, applies final linear layer, and returns logits.
 
-        Args:
-            inputs (tensor): Input tensor.
+    #     Args:
+    #         inputs (tensor): Input tensor.
 
-        Returns:
-            Output of this model after processing.
-        """
-        bs = inputs.size(0)
+    #     Returns:
+    #         Output of this model after processing.
+    #     """
+    #     bs = inputs.size(0)
 
-        # Convolution layers
-        x = self.extract_features(inputs)
+    #     # Convolution layers
+    #     x = self.extract_features(inputs)
 
-        # Pooling and final linear layer
-        # x = self._avg_pooling(x)
-        # x = x.view(bs, -1)
-        # x = self._dropout(x)
-        # x = self._fc(x)
+    #     # Pooling and final linear layer
+    #     x = self._avg_pooling(x)
+    #     x = x.view(bs, -1)
+    #     x = self._dropout(x)
+    #     x = self._fc(x)
 
-        return x
+    #     return x
 
     @classmethod
     def from_name(cls, model_name, in_channels=3, **override_params):
