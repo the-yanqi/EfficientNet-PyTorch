@@ -169,7 +169,9 @@ class EfficientNet(nn.Module):
         stem_filters = self._global_params.stem_filters
         out_channels = round_filters(stem_filters, self._global_params)  # number of output channels
         self._conv_stem = Conv2d(in_channels, out_channels, kernel_size=3, stride=2, bias=False)
-        self._bn0 = nn.BatchNorm2d(num_features=out_channels, momentum=bn_mom, eps=bn_eps)
+        
+        #self._bn0 = nn.BatchNorm2d(num_features=out_channels, momentum=bn_mom, eps=bn_eps)
+        self._bn0 = nn.Conv2d(16,16,kernel_size=3, stride=2,padding=2,bias=False)
         image_size = calculate_output_image_size(image_size, 2)
 
         # Build blocks
@@ -235,6 +237,7 @@ class EfficientNet(nn.Module):
         """
         # Stem
         x = self._conv_stem(inputs)
+        print('stem',x.shape)
         x = self._bn0(x)
         x = self._swish(x)
         print('In MBConvBlock')
@@ -244,7 +247,7 @@ class EfficientNet(nn.Module):
             if drop_connect_rate:
                 drop_connect_rate *= float(idx) / len(self._blocks) # scale drop connect_rate
             x = block(x, drop_connect_rate=drop_connect_rate)
-        
+            print(x.shape)
         # Head
         x = self._swish(self._bn1(self._conv_head(x)))
 
