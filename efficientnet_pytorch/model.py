@@ -166,14 +166,15 @@ class EfficientNet(nn.Module):
 
         # Stem
         in_channels = 3  # rgb
-        out_channels = round_filters(32, self._global_params)  # number of output channels
+        stem_filters = self._global_params.stem_filters
+        out_channels = round_filters(stem_filters, self._global_params)  # number of output channels
         self._conv_stem = Conv2d(in_channels, out_channels, kernel_size=3, stride=2, bias=False)
         self._bn0 = nn.BatchNorm2d(num_features=out_channels, momentum=bn_mom, eps=bn_eps)
         image_size = calculate_output_image_size(image_size, 2)
 
         # Build blocks
         self._blocks = nn.ModuleList([])
-        for block_args in self._blocks_args:
+        for i,block_args in enumerate(self._blocks_args):
 
             # Update block input and output filters based on depth multiplier.
             block_args = block_args._replace(
@@ -181,7 +182,13 @@ class EfficientNet(nn.Module):
                 output_filters=round_filters(block_args.output_filters, self._global_params),
                 num_repeat=round_repeats(block_args.num_repeat, self._global_params)
             )
-
+            
+            if i == 0:
+                block_args = block_args._replace(
+                    input_filters=round_filters(out_channels, self._global_params))
+            if i == len(self._blocks_args)-1:
+                block_args = block_args._replace(stride = self._global_params.last_block_stride)
+                
             # The first block needs to take care of stride and filter size increase.
             self._blocks.append(MBConvBlock(block_args, self._global_params, image_size=image_size))
             image_size = calculate_output_image_size(image_size, block_args.stride)
@@ -216,7 +223,7 @@ class EfficientNet(nn.Module):
             block.set_swish(memory_efficient)
 
 
-    def forward(self, inputs):
+    def extract_features(self, inputs):
         """use convolution layer to extract feature .
 
         Args:
@@ -227,8 +234,9 @@ class EfficientNet(nn.Module):
             layer in the efficientnet model.
         """
         # Stem
-        x = self._swish(self._bn0(self._conv_stem(inputs)))
-        print(x.shape)
+        x = self._conv_stem(inputs)
+        x = self._bn0(x)
+        x = self._swish(x)
         print('In MBConvBlock')
         # Blocks
         for idx, block in enumerate(self._blocks):
@@ -236,35 +244,34 @@ class EfficientNet(nn.Module):
             if drop_connect_rate:
                 drop_connect_rate *= float(idx) / len(self._blocks) # scale drop connect_rate
             x = block(x, drop_connect_rate=drop_connect_rate)
-            print(x.shape)
         
         # Head
         x = self._swish(self._bn1(self._conv_head(x)))
 
         return x
 
-    # def forward(self, inputs):
-    #     """EfficientNet's forward function.
-    #        Calls extract_features to extract features, applies final linear layer, and returns logits.
+    def forward(self, inputs):
+        """EfficientNet's forward function.
+           Calls extract_features to extract features, applies final linear layer, and returns logits.
 
-    #     Args:
-    #         inputs (tensor): Input tensor.
+        Args:
+            inputs (tensor): Input tensor.
 
-    #     Returns:
-    #         Output of this model after processing.
-    #     """
-    #     bs = inputs.size(0)
+        Returns:
+            Output of this model after processing.
+        """
+        bs = inputs.size(0)
 
-    #     # Convolution layers
-    #     x = self.extract_features(inputs)
+        # Convolution layers
+        x = self.extract_features(inputs)
 
-    #     # Pooling and final linear layer
-    #     x = self._avg_pooling(x)
-    #     x = x.view(bs, -1)
-    #     x = self._dropout(x)
-    #     x = self._fc(x)
+        # Pooling and final linear layer
+        x = self._avg_pooling(x)
+        x = x.view(bs, -1)
+        x = self._dropout(x)
+        x = self._fc(x)
 
-    #     return x
+        return x
 
     @classmethod
     def from_name(cls, model_name, in_channels=3, **override_params):
@@ -365,5 +372,5 @@ class EfficientNet(nn.Module):
         """
         if in_channels != 3:
             Conv2d = get_same_padding_conv2d(image_size = self._global_params.image_size)
-            out_channels = round_filters(32, self._global_params)
+            out_channels = round_filters(self._global_params.stem_filters, self._global_params)
             self._conv_stem = Conv2d(in_channels, out_channels, kernel_size=3, stride=2, bias=False)
